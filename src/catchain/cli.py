@@ -1,8 +1,9 @@
 import click
 import json
 from pathlib import Path
-from . import ledger, hashers
+from . import ledger, hashers, signing
 from .s3_utils import handle_s3_path
+from datetime import datetime, timezone
 
 
 @click.group()
@@ -24,21 +25,24 @@ def init():
 
 @main.command()
 @click.argument("path", type=str)
-def add(path: str):
+@click.option("--sign", "key_id", help="Sign the ledger entry with a GPG key ID.")
+def add(path: str, key_id: str | None):
     """Hashes a local or S3 dataset and records its provenance."""
     try:
         if path.startswith("s3://"):
             # Handle S3 path
             click.echo(f"Processing S3 URI '{path}'...")
             with handle_s3_path(path) as local_path:
-                process_and_record(local_path, source_uri=path)
+                process_and_record(local_path, source_uri=path, key_id=key_id)
         else:
             # Handle local path
             target_path = Path(path).resolve()
             if not target_path.exists():
                 raise FileNotFoundError(f"Local path does not exist: {target_path}")
             click.echo(f"Processing '{target_path}'...")
-            process_and_record(target_path, source_uri=target_path.as_uri())
+            process_and_record(
+                target_path, source_uri=target_path.as_uri(), key_id=key_id
+            )
 
     except FileNotFoundError as e:
         click.secho(f"Error: {e}", err=True, fg="red")
@@ -50,7 +54,8 @@ def add(path: str):
 @click.argument("path", type=str)
 @click.option("--from-hash", required=True, help="The hash of the parent dataset.")
 @click.option("--description", help="A description of the transformation performed.")
-def transform(path: str, from_hash: str, description: str | None):
+@click.option("--sign", "key_id", help="Sign the ledger entry with a GPG key ID.")
+def transform(path: str, from_hash: str, description: str | None, key_id: str | None):
     """Hashes a transformed dataset and links it to its parent."""
     try:
         if ledger.find_entry_by_hash(from_hash) is None:
@@ -64,6 +69,7 @@ def transform(path: str, from_hash: str, description: str | None):
                     source_uri=path,
                     parent_hash=from_hash,
                     transform_description=description,
+                    key_id=key_id,
                 )
         else:
             target_path = Path(path).resolve()
@@ -75,6 +81,7 @@ def transform(path: str, from_hash: str, description: str | None):
                 source_uri=target_path.as_uri(),
                 parent_hash=from_hash,
                 transform_description=description,
+                key_id=key_id,
             )
 
     except (FileNotFoundError, ValueError) as e:
@@ -88,6 +95,7 @@ def process_and_record(
     source_uri: str,
     parent_hash: str | None = None,
     transform_description: str | None = None,
+    key_id: str | None = None,
 ):
     """Helper function to hash data and record it in the ledger."""
     with click.progressbar(
@@ -98,11 +106,31 @@ def process_and_record(
 
     click.echo(f"  -> Calculated hash: {dataset_hash}")
 
+    entry_payload = {
+        "hash": dataset_hash,
+        "source_uri": source_uri,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "lineage": None,
+    }
+    if parent_hash:
+        entry_payload["lineage"] = {
+            "parent_hash": parent_hash,
+            "transform_description": transform_description,
+        }
+
+    signature_data = None
+    if key_id:
+        click.echo(f"Signing with GPG key '{key_id}'...")
+        canonical_payload = signing.canonicalize_entry(entry_payload)
+        signature_data = signing.sign_payload(canonical_payload, key_id)
+        click.secho("  -> Signature created successfully.", fg="green")
+
     ledger.add_entry(
         dataset_hash,
         source_uri,
         parent_hash=parent_hash,
         transform_description=transform_description,
+        signature_data=signature_data,
     )
 
     click.secho(f"\nSuccessfully added '{source_uri}' to the ledger.", fg="green")
@@ -138,6 +166,7 @@ def certificate(dataset_hash: str, output: str | None):
                 "transformations": entry.get("transformations", []),
                 "lineage": entry.get("lineage"),
             },
+            "signature": entry.get("signature"),
         }
 
         cert_json = json.dumps(certificate_doc, indent=4)

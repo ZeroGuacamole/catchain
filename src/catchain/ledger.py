@@ -37,7 +37,8 @@ def add_entry(
     base_dir: Path = Path("."),
     parent_hash: str | None = None,
     transform_description: str | None = None,
-) -> None:
+    signature_data: dict | None = None,
+) -> dict:
     """
     Adds a new dataset provenance entry to the ledger.
 
@@ -47,6 +48,10 @@ def add_entry(
         base_dir: The base directory of the project.
         parent_hash: The hash of the parent dataset, if this is a transformation.
         transform_description: A description of the transformation performed.
+        signature_data: A dict containing signature info from the signing module.
+
+    Returns:
+        The newly added ledger entry dictionary.
     """
     ledger_file = base_dir / LEDGER_DIR_NAME / LEDGER_FILE_NAME
     if not ledger_file.exists():
@@ -60,6 +65,7 @@ def add_entry(
             "source_uri": source_uri,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "lineage": None,
+            "signature": signature_data,
         }
 
         if parent_hash:
@@ -72,6 +78,8 @@ def add_entry(
 
         f.seek(0)
         json.dump(entries, f, indent=4)
+
+    return new_entry
 
 
 def find_entry_by_hash(dataset_hash: str, base_dir: Path = Path(".")) -> dict | None:
