@@ -153,3 +153,6 @@ dmypy.json
 # Editors
 *.lock
 .vscode/ 
+
+# CatChain
+.catchain/
