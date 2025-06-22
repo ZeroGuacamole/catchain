@@ -58,3 +58,27 @@ def add_entry(dataset_hash: str, source_uri: str, base_dir: Path = Path(".")) ->
 
         f.seek(0)
         json.dump(entries, f, indent=4)
+
+
+def find_entry_by_hash(dataset_hash: str, base_dir: Path = Path(".")) -> dict | None:
+    """
+    Finds a ledger entry by its dataset hash.
+
+    Args:
+        dataset_hash: The SHA-256 hash to search for.
+        base_dir: The base directory of the project.
+
+    Returns:
+        The matching ledger entry dictionary, or None if not found.
+    """
+    ledger_file = base_dir / LEDGER_DIR_NAME / LEDGER_FILE_NAME
+    if not ledger_file.exists():
+        return None
+
+    with open(ledger_file, "r") as f:
+        entries = json.load(f)
+        for entry in entries:
+            if entry.get("hash") == dataset_hash:
+                return entry
+
+    return None

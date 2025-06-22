@@ -1,4 +1,5 @@
 import click
+import json
 from pathlib import Path
 from . import ledger, hashers
 from .s3_utils import handle_s3_path
@@ -63,9 +64,45 @@ def process_and_record(local_path: Path, source_uri: str):
 
 @main.command()
 @click.argument("dataset_hash")
-def certificate(dataset_hash: str):
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(dir_okay=False, writable=True),
+    help="Path to save the certificate file.",
+)
+def certificate(dataset_hash: str, output: str | None):
     """Generates a provenance certificate for a dataset hash."""
-    click.echo(f"Generating certificate for '{dataset_hash}'... (Not yet implemented)")
+    try:
+        entry = ledger.find_entry_by_hash(dataset_hash)
+
+        if not entry:
+            click.secho(
+                f"Error: No entry found for hash '{dataset_hash}'.", err=True, fg="red"
+            )
+            return
+
+        certificate_doc = {
+            "schema_version": "1.0.0",
+            "dataset_hash": entry["hash"],
+            "hash_algorithm": "sha256",
+            "provenance": {
+                "source_uri": entry["source_uri"],
+                "timestamp_utc": entry["timestamp"],
+                "transformations": entry["transformations"],
+            },
+        }
+
+        cert_json = json.dumps(certificate_doc, indent=4)
+
+        if output:
+            output_path = Path(output)
+            output_path.write_text(cert_json)
+            click.secho(f"Successfully saved certificate to {output_path}", fg="green")
+        else:
+            click.echo(cert_json)
+
+    except Exception as e:
+        click.secho(f"An unexpected error occurred: {e}", err=True, fg="red")
 
 
 if __name__ == "__main__":
