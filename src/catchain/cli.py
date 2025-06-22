@@ -46,7 +46,49 @@ def add(path: str):
         click.secho(f"An unexpected error occurred: {e}", err=True, fg="red")
 
 
-def process_and_record(local_path: Path, source_uri: str):
+@main.command()
+@click.argument("path", type=str)
+@click.option("--from-hash", required=True, help="The hash of the parent dataset.")
+@click.option("--description", help="A description of the transformation performed.")
+def transform(path: str, from_hash: str, description: str | None):
+    """Hashes a transformed dataset and links it to its parent."""
+    try:
+        if ledger.find_entry_by_hash(from_hash) is None:
+            raise ValueError(f"Parent with hash '{from_hash}' not found in ledger.")
+
+        if path.startswith("s3://"):
+            click.echo(f"Processing transformed S3 URI '{path}'...")
+            with handle_s3_path(path) as local_path:
+                process_and_record(
+                    local_path,
+                    source_uri=path,
+                    parent_hash=from_hash,
+                    transform_description=description,
+                )
+        else:
+            target_path = Path(path).resolve()
+            if not target_path.exists():
+                raise FileNotFoundError(f"Local path does not exist: {target_path}")
+            click.echo(f"Processing transformed path '{target_path}'...")
+            process_and_record(
+                target_path,
+                source_uri=target_path.as_uri(),
+                parent_hash=from_hash,
+                transform_description=description,
+            )
+
+    except (FileNotFoundError, ValueError) as e:
+        click.secho(f"Error: {e}", err=True, fg="red")
+    except Exception as e:
+        click.secho(f"An unexpected error occurred: {e}", err=True, fg="red")
+
+
+def process_and_record(
+    local_path: Path,
+    source_uri: str,
+    parent_hash: str | None = None,
+    transform_description: str | None = None,
+):
     """Helper function to hash data and record it in the ledger."""
     with click.progressbar(
         length=1, label="Hashing data", show_percent=False, show_pos=False
@@ -56,7 +98,12 @@ def process_and_record(local_path: Path, source_uri: str):
 
     click.echo(f"  -> Calculated hash: {dataset_hash}")
 
-    ledger.add_entry(dataset_hash, source_uri)
+    ledger.add_entry(
+        dataset_hash,
+        source_uri,
+        parent_hash=parent_hash,
+        transform_description=transform_description,
+    )
 
     click.secho(f"\nSuccessfully added '{source_uri}' to the ledger.", fg="green")
     click.echo(f"Dataset Hash: {dataset_hash}")
@@ -88,7 +135,8 @@ def certificate(dataset_hash: str, output: str | None):
             "provenance": {
                 "source_uri": entry["source_uri"],
                 "timestamp_utc": entry["timestamp"],
-                "transformations": entry["transformations"],
+                "transformations": entry.get("transformations", []),
+                "lineage": entry.get("lineage"),
             },
         }
 

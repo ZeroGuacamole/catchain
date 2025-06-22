@@ -31,7 +31,13 @@ def init_project(base_dir: Path = Path(".")) -> None:
         print(f"Initialized empty ledger at {ledger_file}")
 
 
-def add_entry(dataset_hash: str, source_uri: str, base_dir: Path = Path(".")) -> None:
+def add_entry(
+    dataset_hash: str,
+    source_uri: str,
+    base_dir: Path = Path("."),
+    parent_hash: str | None = None,
+    transform_description: str | None = None,
+) -> None:
     """
     Adds a new dataset provenance entry to the ledger.
 
@@ -39,6 +45,8 @@ def add_entry(dataset_hash: str, source_uri: str, base_dir: Path = Path(".")) ->
         dataset_hash: The SHA-256 hash of the dataset.
         source_uri: The source location of the data (e.g., a file path or S3 URI).
         base_dir: The base directory of the project.
+        parent_hash: The hash of the parent dataset, if this is a transformation.
+        transform_description: A description of the transformation performed.
     """
     ledger_file = base_dir / LEDGER_DIR_NAME / LEDGER_FILE_NAME
     if not ledger_file.exists():
@@ -51,8 +59,14 @@ def add_entry(dataset_hash: str, source_uri: str, base_dir: Path = Path(".")) ->
             "hash": dataset_hash,
             "source_uri": source_uri,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "transformations": [],
+            "lineage": None,
         }
+
+        if parent_hash:
+            new_entry["lineage"] = {
+                "parent_hash": parent_hash,
+                "transform_description": transform_description,
+            }
 
         entries.append(new_entry)
 

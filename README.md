@@ -2,7 +2,7 @@
 
 **CatChain: A verifiable data supply chain for AI.**
 
-CatChain is a developer-focused command-line tool for creating and managing auditable data pipelines for AI model training. As regulators and customers increasingly demand to know how an AI model was built, data provenance—the documented history of data—is becoming critical.
+CatChain is a command-line tool for creating and managing auditable data pipelines for AI model training. As regulators and customers increasingly demand to know how an AI model was built, data provenance—the documented history of data—is becoming critical.
 
 This tool allows you to build a verifiable "supply chain" for your training data. It uses cryptographic hashing to create an immutable audit trail of where your data came from and when it was processed, producing a "provenance certificate" that can be linked to your trained model.
 
