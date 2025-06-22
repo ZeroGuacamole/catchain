@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "catchain"
+version = "0.1.0"
+description = "A developer-focused tool for creating and managing auditable data pipelines for AI model training."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["click", "boto3", "huggingface-hub", "pyyaml"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+catchain = "catchain.cli:main"
