@@ -20,11 +20,14 @@ You can install CatChain directly from this repository using `pip`:
 pip install git+https://github.com/ZeroGuacamole/catchain.git
 ```
 
-You will also need to have your AWS credentials configured in your environment to use S3 URIs.
+**Prerequisites:**
+
+- To use S3 URIs, you will need to have your AWS credentials configured in your environment.
+- To use the `--sign` feature, you must have `gpg` installed and a GPG key available on your system.
 
 ## Quick Start
 
-Here is a complete workflow for generating your first provenance certificate.
+Here is a complete workflow for generating your first provenance certificate, including tracking a transformation.
 
 ### 1. Initialize Your Project
 
@@ -36,39 +39,78 @@ catchain init
 
 > ✨ Initialized empty ledger at .catchain/ledger.json
 
-### 2. Add a Dataset
+### 2. Add a Raw Dataset
 
-Add a dataset (a file or a directory) to the ledger. CatChain will hash the data and record its metadata. This works for both local paths and S3 URIs.
+Add your initial, raw dataset to the ledger. CatChain will hash the data and record its metadata. You can optionally sign the entry with your GPG key ID.
 
 **Local File:**
 
 ```bash
-catchain add ./data/my_training_data.csv
+catchain add ./data/raw_dataset.csv --sign your.email@example.com
 ```
 
 **S3 Directory:**
 
 ```bash
-catchain add s3://my-ai-bucket/datasets/images/
+catchain add s3://my-ai-bucket/datasets/raw_images/ --sign FINGERPRINT
 ```
 
 The output will give you a unique, deterministic hash for your dataset.
 
-> ✅ Successfully added 's3://my-ai-bucket/datasets/images/' to the ledger.
+> ✅ Successfully added './data/raw_dataset.csv' to the ledger.
 >
-> **Dataset Hash:** 2b89a3cce3818f769d95c45e612f04e43f076b66494791a8379659a72b834d85
+> **Dataset Hash:** a5adec84d60be012f968f16e2eb410ffcc581760fb589478c30e08d3f60c0306
 
-### 3. Generate the Provenance Certificate
+### 3. Transform Your Dataset
 
-Using the hash from the previous step, generate the certificate.
+After you run a script to clean, filter, or augment your data, you create a new version. Use the `transform` command to add this new version to the ledger, creating a verifiable link to its parent.
 
 ```bash
-catchain certificate 2b89a3cce3818f769d95c45e612f04e43f076b66494791a8379659a72b834d85 --output provenance.json
+catchain transform ./data/cleaned_dataset.csv \
+    --from-hash a5adec84d60be012f968f16e2eb410ffcc581760fb589478c30e08d3f60c0306 \
+    --description "Removed rows with null values." \
+    --sign your.email@example.com
+```
+
+> ✅ Successfully added './data/cleaned_dataset.csv' to the ledger.
+>
+> **Dataset Hash:** 75970c0ce13e3b27fc183e99f1ff2d5b586153ea4951b879de38fbcdb3c2e268
+
+### 4. Generate the Provenance Certificate
+
+Using the hash of your final, transformed dataset, generate the certificate.
+
+```bash
+catchain certificate 75970c0ce13e3b27fc183e99f1ff2d5b586153ea4951b879de38fbcdb3c2e268 --output provenance.json
 ```
 
 > ✅ Successfully saved certificate to provenance.json
 
-This creates a `provenance.json` file in your directory.
+This creates a `provenance.json` file that contains the full history of your data.
+
+## The Provenance Certificate
+
+The generated certificate is a self-contained, verifiable JSON document. The inclusion of `lineage` and `signature` blocks provides a powerful, auditable history.
+
+```json
+{
+  "schema_version": "1.0.0",
+  "dataset_hash": "75970c0ce13e3b27fc183e99f1ff2d5b586153ea4951b879de38fbcdb3c2e268",
+  "hash_algorithm": "sha256",
+  "provenance": {
+    "source_uri": "file:///path/to/your/project/data/cleaned_dataset.csv",
+    "timestamp_utc": "2025-06-22T17:22:35.417103+00:00",
+    "lineage": {
+      "parent_hash": "a5adec84d60be012f968f16e2eb410ffcc581760fb589478c30e08d3f60c0306",
+      "transform_description": "Removed rows with null values."
+    }
+  },
+  "signature": {
+    "key_id": "your.email@example.com",
+    "signature": "-----BEGIN PGP SIGNATURE-----\\n\\niQIzBAABCAAdFiEE...\\n-----END PGP SIGNATURE-----\\n"
+  }
+}
+```
 
 ## Linking Certificate to a Model
 
